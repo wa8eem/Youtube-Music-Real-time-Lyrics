@@ -1248,8 +1248,34 @@
         if (!beautifierContainer) {
             createLyricsCard();
         }
-        beautifierContainer.classList.add('active');
-        
+        // Position the card just below the launcher (top-right)
+        const launcher = document.getElementById('ytm-launcher');
+        if (launcher && beautifierContainer) {
+            const rect = launcher.getBoundingClientRect();
+            const margin = 8; // gap between launcher and card
+
+            // Make the card visible first so we can measure its height for clamping
+            beautifierContainer.classList.add('active');
+
+            // Reset any drag transform so positioning is predictable when first shown
+            try { beautifierContainer.style.transform = 'none'; } catch (e) {}
+
+            // Compute inline right (distance from viewport right) and top (below launcher)
+            const computedRight = Math.max(8, Math.round(window.innerWidth - rect.right));
+            let computedTop = Math.round(rect.bottom + margin);
+
+            // Clamp to viewport bottom so the card doesn't overflow
+            const cardHeight = beautifierContainer.offsetHeight || 300;
+            const maxTop = Math.max(8, window.innerHeight - cardHeight - 10);
+            if (computedTop > maxTop) computedTop = maxTop;
+
+            beautifierContainer.style.top = computedTop + 'px';
+            beautifierContainer.style.right = computedRight + 'px';
+        } else if (beautifierContainer) {
+            // Fallback: just show at default position
+            beautifierContainer.classList.add('active');
+        }
+
         // Update with current song data
         const songData = getNowPlaying();
         if (songData) {
