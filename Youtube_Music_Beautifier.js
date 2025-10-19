@@ -931,49 +931,31 @@
     function updateLyrics(currentSeconds) {
         if (times.length === 0) return;
 
-        // Handle rewind
-        if (currentSeconds < currentTime) {
-            const lyricLines = document.querySelectorAll('.ytm-lyric-line');
+        // Recompute the correct lyric index for the supplied time (handles forward and backward seeks)
+        const lyricLines = document.querySelectorAll('.ytm-lyric-line');
+        let newIndex = 0;
+        for (let i = 0; i < times.length; i++) {
+            if (currentSeconds >= times[i]) {
+                newIndex = i;
+            } else {
+                break;
+            }
+        }
+
+        // If index changed, update classes and scroll
+        if (newIndex !== currentIndex) {
+            // Remove previous active
             lyricLines.forEach(line => line.classList.remove('active'));
-            currentIndex = 0;
-            
-            for (let i = 0; i < times.length; i++) {
-                if (currentSeconds >= times[i]) {
-                    currentIndex = i;
-                } else {
-                    break;
-                }
-            }
-            
-            if (currentIndex < lyricLines.length) {
-                lyricLines[currentIndex].classList.add('active');
-                lyricLines[currentIndex].scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center' 
-                });
+
+            // Add active to new index if within bounds
+            if (lyricLines[newIndex]) {
+                lyricLines[newIndex].classList.add('active');
+                lyricLines[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
 
+        currentIndex = newIndex;
         currentTime = currentSeconds;
-
-        // Handle forward progression
-        if (currentIndex < times.length && currentSeconds >= times[currentIndex]) {
-            const lyricLines = document.querySelectorAll('.ytm-lyric-line');
-            
-            // Remove previous highlight
-            if (currentIndex > 0) {
-                lyricLines[currentIndex - 1]?.classList.remove('active');
-            }
-            
-            // Add current highlight
-            lyricLines[currentIndex]?.classList.add('active');
-            lyricLines[currentIndex]?.scrollIntoView({ 
-                behavior: 'smooth', 
-                block: 'center' 
-            });
-            
-            currentIndex++;
-        }
     }
 
     // Control Functions
@@ -1167,6 +1149,85 @@
         }
     }
 
+    // Keep track of the currently-attached media element so we can listen for seeks/timeupdates
+    let _attachedMedia = null;
+    function findAndAttachMediaListeners() {
+        try {
+            const media = Array.from(document.querySelectorAll('video, audio'))
+                .filter(m => m && !isNaN(m.duration) && m.duration > 0 && m.offsetParent !== null)[0] || null;
+
+            if (media === _attachedMedia) return; // already attached
+
+            // Remove listeners from old media
+            if (_attachedMedia) {
+                try {
+                    _attachedMedia.removeEventListener('timeupdate', _mediaTimeHandler);
+                    _attachedMedia.removeEventListener('seeked', _mediaSeekHandler);
+                    _attachedMedia.removeEventListener('play', _mediaPlayHandler);
+                    _attachedMedia.removeEventListener('pause', _mediaPauseHandler);
+                } catch (e) {}
+            }
+
+            _attachedMedia = media;
+
+            if (!_attachedMedia) {
+                console.log('findAndAttachMediaListeners: no media element found');
+                return;
+            }
+
+            // Handlers reference
+            _attachedMedia.addEventListener('timeupdate', _mediaTimeHandler);
+            _attachedMedia.addEventListener('seeked', _mediaSeekHandler);
+            _attachedMedia.addEventListener('play', _mediaPlayHandler);
+            _attachedMedia.addEventListener('pause', _mediaPauseHandler);
+
+            console.log('Attached media listeners to', _attachedMedia);
+        } catch (e) {
+            console.log('findAndAttachMediaListeners error', e);
+        }
+    }
+
+    function _mediaTimeHandler(e) {
+        try {
+            const media = e.target;
+            const elapsed = Math.floor(media.currentTime || 0);
+            // adjust for any offset saved by user
+            const adjusted = elapsed - incomingSecondOffset;
+            // update the lyric sync
+            updateLyrics(adjusted);
+
+            // update currentlyPlayingSong elapsed so UI reflects manual changes
+            if (currentlyPlayingSong) currentlyPlayingSong.elapsed = elapsed;
+        } catch (err) {
+            console.log('mediaTimeHandler error', err);
+        }
+    }
+
+    function _mediaSeekHandler(e) {
+        try {
+            const media = e.target;
+            const elapsed = Math.floor(media.currentTime || 0);
+            console.log('Media seek detected to', elapsed);
+            // When a seek happens, reset the lyric index state so updateLyrics recalculates correctly
+            currentTime = -1;
+            currentIndex = 0;
+            updateLyrics(elapsed - incomingSecondOffset);
+            if (currentlyPlayingSong) currentlyPlayingSong.elapsed = elapsed;
+        } catch (err) {
+            console.log('mediaSeekHandler error', err);
+        }
+    }
+
+    function _mediaPlayHandler(e) {
+        // Ensure listeners stay attached
+        setTimeout(findAndAttachMediaListeners, 100);
+    }
+
+    function _mediaPauseHandler(e) {
+        // keep tracking paused state for possible UI updates
+        // ...not required currently
+    }
+
     // Force refresh function for manual updates - with throttling
     let lastRefreshTime = 0;
     function forceRefresh() {
@@ -1223,6 +1284,9 @@
 
         // Remove the excessive main content observer that was causing issues
         console.log("[YouTube Music Beautifier Userscript] Initialized!");
+
+        // Attach media listeners to capture manual seeks
+        findAndAttachMediaListeners();
     }
 
     // Wait for page to load
@@ -1344,6 +1408,8 @@
                 }, 2000);
             }
         }
+        ,
+        reattachMedia: () => { findAndAttachMediaListeners(); console.log('reattachMedia called'); }
     };
 
 })();
