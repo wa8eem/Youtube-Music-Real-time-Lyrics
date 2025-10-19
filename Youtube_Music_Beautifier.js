@@ -521,37 +521,287 @@
             return;
         }
         
-        // Try to use YouTube Music's internal seeking mechanism
-        const progressBar = document.querySelector('.progress-bar.ytmusic-player-bar');
-        const sliderContainer = document.querySelector('#progress-bar');
+        // Try multiple seeking methods in order of preference
+        const seekMethods = [
+            () => tryProgressBarSeek(targetTime, songData.total),
+            () => trySliderSeek(targetTime, songData.total),
+            () => tryVideoPlayerSeek(targetTime, songData.total),
+            () => fallbackKeyboardSeek(timeDifference)
+        ];
         
-        if (progressBar && sliderContainer) {
+        for (const method of seekMethods) {
             try {
-                // Calculate the percentage position
-                const percentage = targetTime / songData.total;
-                const rect = sliderContainer.getBoundingClientRect();
-                const clickX = rect.left + (rect.width * percentage);
-                const clickY = rect.top + (rect.height / 2);
+                if (method()) {
+                    console.log("Seeking method succeeded");
+                    return;
+                }
+            } catch (error) {
+                console.log("Seeking method failed:", error);
+            }
+        }
+        
+        console.log("All seeking methods failed");
+    }
+    
+    function tryProgressBarSeek(targetTime, totalTime) {
+        const progressSelectors = [
+            '#progress-bar',
+            '.progress-bar',
+            'tp-yt-paper-slider#progress-bar',
+            '.ytmusic-player-bar #progress-bar',
+            '[role="slider"]'
+        ];
+        
+        for (const selector of progressSelectors) {
+            const progressBar = document.querySelector(selector);
+            if (progressBar) {
+                const percentage = targetTime / totalTime;
+                const rect = progressBar.getBoundingClientRect();
                 
-                // Create and dispatch click event
-                const clickEvent = new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    clientX: clickX,
-                    clientY: clickY
+                // Try multiple interaction methods
+                if (tryDirectSliderInteraction(progressBar, percentage)) {
+                    console.log(`Direct slider interaction worked for ${selector}`);
+                    return true;
+                }
+                
+                if (tryPointerEvents(progressBar, rect, percentage)) {
+                    console.log(`Pointer events worked for ${selector}`);
+                    return true;
+                }
+                
+                if (tryFocusAndKeys(progressBar, percentage)) {
+                    console.log(`Focus and keys worked for ${selector}`);
+                    return true;
+                }
+                
+                console.log(`All methods failed for ${selector}`);
+            }
+        }
+        return false;
+    }
+    
+    function tryDirectSliderInteraction(slider, percentage) {
+        try {
+            // Method 1: Set value directly
+            if (slider.value !== undefined) {
+                const oldValue = slider.value;
+                slider.value = percentage * 100;
+                
+                // Trigger all relevant events
+                const events = ['input', 'change', 'slide', 'iron-change'];
+                events.forEach(eventType => {
+                    const event = new CustomEvent(eventType, {
+                        bubbles: true,
+                        detail: { value: percentage * 100 }
+                    });
+                    slider.dispatchEvent(event);
                 });
                 
-                sliderContainer.dispatchEvent(clickEvent);
-                console.log(`Seeked to ${percentage * 100}% of track`);
-                
-            } catch (error) {
-                console.log("Direct seeking failed, trying keyboard method:", error);
-                fallbackKeyboardSeek(timeDifference);
+                // Check if value actually changed
+                if (slider.value !== oldValue) {
+                    return true;
+                }
             }
-        } else {
-            console.log("Progress bar not found, using keyboard method");
-            fallbackKeyboardSeek(timeDifference);
+            
+            // Method 2: Use Polymer/iron-input specific methods
+            if (slider._setValue) {
+                slider._setValue(percentage * 100);
+                return true;
+            }
+            
+            if (slider.immediateValue !== undefined) {
+                slider.immediateValue = percentage * 100;
+                slider.value = percentage * 100;
+                return true;
+            }
+            
+        } catch (error) {
+            console.log("Direct slider interaction failed:", error);
         }
+        return false;
+    }
+    
+    function tryPointerEvents(element, rect, percentage) {
+        try {
+            const clickX = rect.left + (rect.width * percentage);
+            const clickY = rect.top + (rect.height / 2);
+            
+            // Create a complete pointer event sequence
+            const events = [
+                { type: 'pointerdown', isPrimary: true },
+                { type: 'mousedown', button: 0 },
+                { type: 'pointermove', isPrimary: true },
+                { type: 'mousemove' },
+                { type: 'pointerup', isPrimary: true },
+                { type: 'mouseup', button: 0 },
+                { type: 'click', button: 0 }
+            ];
+            
+            events.forEach(({ type, isPrimary, button }) => {
+                const event = type.startsWith('pointer') 
+                    ? new PointerEvent(type, {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: clickX,
+                        clientY: clickY,
+                        isPrimary: isPrimary || false,
+                        pointerId: 1
+                    })
+                    : new MouseEvent(type, {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: clickX,
+                        clientY: clickY,
+                        button: button || 0
+                    });
+                
+                element.dispatchEvent(event);
+            });
+            
+            return true;
+        } catch (error) {
+            console.log("Pointer events failed:", error);
+            return false;
+        }
+    }
+    
+    function tryFocusAndKeys(element, percentage) {
+        try {
+            // Focus the element first
+            element.focus();
+            
+            // Calculate how many key presses we need
+            // Most sliders respond to arrow keys for fine control
+            const targetValue = percentage * 100;
+            const currentValue = parseFloat(element.value) || 0;
+            const difference = targetValue - currentValue;
+            
+            // Use Home/End for major jumps, then fine-tune with arrows
+            if (Math.abs(difference) > 50) {
+                const homeEndKey = difference > 0 ? 'End' : 'Home';
+                const keyEvent = new KeyboardEvent('keydown', {
+                    key: homeEndKey,
+                    code: homeEndKey,
+                    bubbles: true
+                });
+                element.dispatchEvent(keyEvent);
+                
+                // Give it a moment to process
+                setTimeout(() => {
+                    // Fine-tune with arrow keys if needed
+                    const newDifference = targetValue - (parseFloat(element.value) || 0);
+                    const arrowKey = newDifference > 0 ? 'ArrowRight' : 'ArrowLeft';
+                    const steps = Math.min(Math.abs(newDifference) / 5, 10); // Limit steps
+                    
+                    for (let i = 0; i < steps; i++) {
+                        setTimeout(() => {
+                            const arrowEvent = new KeyboardEvent('keydown', {
+                                key: arrowKey,
+                                code: arrowKey,
+                                bubbles: true
+                            });
+                            element.dispatchEvent(arrowEvent);
+                        }, i * 50);
+                    }
+                }, 100);
+                
+                return true;
+            }
+            
+            return false;
+        } catch (error) {
+            console.log("Focus and keys failed:", error);
+            return false;
+        }
+    }
+    
+    function trySliderSeek(targetTime, totalTime) {
+        const slider = document.querySelector('tp-yt-paper-slider');
+        if (slider && slider.setAttribute) {
+            const percentage = (targetTime / totalTime) * 100;
+            slider.setAttribute('value', percentage.toString());
+            
+            // Trigger change events
+            const changeEvent = new Event('change', { bubbles: true });
+            const inputEvent = new Event('input', { bubbles: true });
+            slider.dispatchEvent(inputEvent);
+            slider.dispatchEvent(changeEvent);
+            
+            console.log(`Set slider value to ${percentage}%`);
+            return true;
+        }
+        return false;
+    }
+    
+    function tryVideoPlayerSeek(targetTime, totalTime) {
+        // Try multiple video seeking approaches
+        const videos = document.querySelectorAll('video');
+        
+        for (const video of videos) {
+            if (video && !isNaN(video.duration) && video.duration > 0) {
+                try {
+                    // Method 1: Direct currentTime setting
+                    const oldTime = video.currentTime;
+                    video.currentTime = targetTime;
+                    
+                    // Trigger timeupdate event
+                    video.dispatchEvent(new Event('timeupdate'));
+                    video.dispatchEvent(new Event('seeking'));
+                    video.dispatchEvent(new Event('seeked'));
+                    
+                    console.log(`Set video currentTime from ${oldTime} to ${targetTime}`);
+                    
+                    // Verify the seek worked
+                    setTimeout(() => {
+                        if (Math.abs(video.currentTime - targetTime) < 2) {
+                            console.log("Video seek verified successful");
+                        }
+                    }, 100);
+                    
+                    return true;
+                } catch (error) {
+                    console.log("Video seek failed:", error);
+                }
+            }
+        }
+        
+        // Try YouTube's internal player API if available
+        return tryYouTubeAPI(targetTime);
+    }
+    
+    function tryYouTubeAPI(targetTime) {
+        try {
+            // Look for YouTube's internal player object
+            const playerElements = document.querySelectorAll('[data-player-name]');
+            
+            for (const element of playerElements) {
+                if (element.seekTo && typeof element.seekTo === 'function') {
+                    element.seekTo(targetTime);
+                    console.log(`Used YouTube API seekTo(${targetTime})`);
+                    return true;
+                }
+            }
+            
+            // Try accessing through window objects
+            if (window.ytplayer && window.ytplayer.seekTo) {
+                window.ytplayer.seekTo(targetTime);
+                console.log(`Used window.ytplayer.seekTo(${targetTime})`);
+                return true;
+            }
+            
+            // Try looking for Polymer/YouTube Music specific objects
+            const app = document.querySelector('ytmusic-app');
+            if (app && app.playerApi_ && app.playerApi_.seekTo) {
+                app.playerApi_.seekTo(targetTime);
+                console.log(`Used ytmusic-app playerApi seekTo(${targetTime})`);
+                return true;
+            }
+            
+        } catch (error) {
+            console.log("YouTube API seek failed:", error);
+        }
+        
+        return false;
     }
     
     function fallbackKeyboardSeek(timeDifference) {
@@ -820,12 +1070,25 @@
         }
     }
 
-    // Force refresh function for manual updates
+    // Force refresh function for manual updates - with throttling
+    let lastRefreshTime = 0;
     function forceRefresh() {
+        const now = Date.now();
+        if (now - lastRefreshTime < 2000) { // Throttle to once every 2 seconds
+            return;
+        }
+        lastRefreshTime = now;
+        
         setTimeout(() => {
             const songData = getNowPlaying();
             if (songData && beautifierContainer && beautifierContainer.classList.contains('active')) {
-                console.log("Force refreshing song data:", songData.title);
+                // Only log if it's actually a different song
+                const newSongId = songData.title + songData.artist + songData.album;
+                const currentSongId = currentlyPlayingSong?.title + currentlyPlayingSong?.artist + currentlyPlayingSong?.album;
+                
+                if (newSongId !== currentSongId) {
+                    console.log("Song changed, refreshing data:", songData.title);
+                }
                 updateUI(songData);
             }
         }, 100);
@@ -838,34 +1101,30 @@
         // Create launcher button
         createLauncher();
         
-        // Start monitoring
-        setInterval(monitorYouTubeMusic, 1000);
+        // Start monitoring with less frequent updates
+        setInterval(monitorYouTubeMusic, 2000); // Reduced from 1000ms to 2000ms
         
-        // Watch for DOM changes
+        // Watch for DOM changes with throttling
         const playerBar = document.querySelector("ytmusic-player-bar");
         if (playerBar) {
+            let observerTimeout;
             const observer = new MutationObserver(() => {
-                monitorYouTubeMusic();
-                // Additional check for song changes
-                forceRefresh();
+                // Debounce the observer calls
+                clearTimeout(observerTimeout);
+                observerTimeout = setTimeout(() => {
+                    monitorYouTubeMusic();
+                    forceRefresh();
+                }, 500); // Wait 500ms before processing changes
             });
             observer.observe(playerBar, {
                 childList: true,
                 subtree: true,
-                attributes: true
+                attributes: true,
+                attributeFilter: ['aria-label', 'src'] // Only watch specific attributes
             });
         }
 
-        // Also watch the main content area for navigation changes
-        const mainContent = document.querySelector('#main-panel');
-        if (mainContent) {
-            const contentObserver = new MutationObserver(forceRefresh);
-            contentObserver.observe(mainContent, {
-                childList: true,
-                subtree: false
-            });
-        }
-
+        // Remove the excessive main content observer that was causing issues
         console.log("[YouTube Music Beautifier Userscript] Initialized!");
     }
 
@@ -900,7 +1159,94 @@
         show: showLyricsCard,
         hide: hideLyricsCard,
         getNowPlaying,
-        getSongLyrics
+        getSongLyrics,
+        debugSeek: (targetTime) => {
+            console.log("=== COMPREHENSIVE SEEK DEBUG INFO ===");
+            console.log("Target time:", targetTime);
+            
+            // Check progress bar elements
+            const progressSelectors = [
+                '#progress-bar',
+                '.progress-bar', 
+                'tp-yt-paper-slider#progress-bar',
+                '.ytmusic-player-bar #progress-bar',
+                '[role="slider"]'
+            ];
+            
+            console.log("\n--- Progress Bar Elements ---");
+            progressSelectors.forEach(selector => {
+                const element = document.querySelector(selector);
+                if (element) {
+                    console.log(`✓ Found: ${selector}`, element);
+                    console.log(`  Tag: ${element.tagName}`);
+                    console.log(`  Classes: ${element.className}`);
+                    console.log(`  Value: ${element.value}`);
+                    console.log(`  Min: ${element.min}, Max: ${element.max}`);
+                    console.log(`  Attributes:`, [...element.attributes].map(a => `${a.name}="${a.value}"`));
+                    
+                    if (element.getBoundingClientRect) {
+                        const rect = element.getBoundingClientRect();
+                        console.log(`  Bounds: ${rect.width}x${rect.height} at (${rect.left}, ${rect.top})`);
+                    }
+                } else {
+                    console.log(`✗ Not found: ${selector}`);
+                }
+            });
+            
+            // Check video elements
+            console.log("\n--- Video Elements ---");
+            const videos = document.querySelectorAll('video');
+            videos.forEach((video, index) => {
+                console.log(`Video ${index}:`, video);
+                console.log(`  Current time: ${video.currentTime}`);
+                console.log(`  Duration: ${video.duration}`);
+                console.log(`  Paused: ${video.paused}`);
+                console.log(`  Ready state: ${video.readyState}`);
+            });
+            
+            // Check for YouTube APIs
+            console.log("\n--- YouTube APIs ---");
+            console.log("window.ytplayer:", window.ytplayer);
+            
+            const app = document.querySelector('ytmusic-app');
+            if (app) {
+                console.log("ytmusic-app found:", app);
+                console.log("  playerApi_:", app.playerApi_);
+                console.log("  player_:", app.player_);
+            }
+            
+            const playerElements = document.querySelectorAll('[data-player-name]');
+            console.log("Player elements:", playerElements);
+            
+            // Check current song data
+            console.log("\n--- Current Song Data ---");
+            const songData = window.ytmBeautifier.getNowPlaying();
+            console.log("Song data:", songData);
+            
+            console.log("=== END DEBUG INFO ===");
+        },
+        testSeek: (targetTime = 60) => {
+            console.log(`\n=== TESTING SEEK TO ${targetTime}s ===`);
+            window.ytmBeautifier.debugSeek(targetTime);
+            
+            console.log("\nTrying seek methods...");
+            const songData = window.ytmBeautifier.getNowPlaying();
+            if (songData) {
+                // Test each method individually
+                console.log("Method 1: Progress Bar");
+                tryProgressBarSeek(targetTime, songData.total);
+                
+                setTimeout(() => {
+                    console.log("Method 2: Video Player");
+                    tryVideoPlayerSeek(targetTime, songData.total);
+                }, 1000);
+                
+                setTimeout(() => {
+                    console.log("Method 3: Slider");
+                    trySliderSeek(targetTime, songData.total);
+                }, 2000);
+            }
+        }
     };
 
 })();
