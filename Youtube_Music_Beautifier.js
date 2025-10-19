@@ -375,28 +375,31 @@
 
         #ytm-launcher {
             position: fixed;
-            bottom: 20px;
+            top: 100px;
             right: 20px;
-            background: #ff6b6b;
+            background: linear-gradient(135deg, rgba(255,107,107,0.95) 0%, rgba(255,82,82,0.95) 100%);
             color: white;
             border: none;
-            border-radius: 50px;
-            padding: 12px 20px;
+            border-radius: 999px;
+            padding: 10px 14px;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            z-index: 9999;
-            box-shadow: 0 4px 20px rgba(255, 107, 107, 0.3);
-            transition: all 0.3s ease;
-            display: flex;
+            z-index: 99999;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.35), 0 2px 6px rgba(255,82,82,0.12) inset;
+            transition: transform 220ms cubic-bezier(.2,.9,.3,1), box-shadow 220ms ease, opacity 220ms ease;
+            display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            backdrop-filter: blur(6px) saturate(120%);
+            -webkit-backdrop-filter: blur(6px) saturate(120%);
+            padding-left: 12px;
+            padding-right: 16px;
         }
 
         #ytm-launcher:hover {
-            background: #ff5252;
-            transform: scale(1.05);
-            box-shadow: 0 6px 25px rgba(255, 107, 107, 0.4);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.45), 0 4px 14px rgba(255,82,82,0.18) inset;
         }
 
         /* Scrollbar styling */
@@ -428,10 +431,10 @@
             }
             
             #ytm-launcher {
-                bottom: 10px;
+                top: 10px;
                 right: 10px;
-                padding: 10px 16px;
-                font-size: 12px;
+                padding: 8px 12px;
+                font-size: 13px;
             }
         }
     `;
@@ -1073,7 +1076,15 @@
     function createLauncher() {
         const launcher = document.createElement('button');
         launcher.id = 'ytm-launcher';
-        launcher.innerHTML = '� <span>Lyrics</span>';
+        launcher.setAttribute('aria-label', 'Show lyrics');
+        launcher.setAttribute('title', 'Show lyrics');
+        launcher.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                <path d="M4 6H20V18H8L4 22V6Z" fill="white" opacity="0.95"/>
+                <path d="M7 9H17" stroke="rgba(0,0,0,0.12)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Lyrics</span>
+        `;
         launcher.onclick = showLyricsCard;
         document.body.appendChild(launcher);
         return launcher;
