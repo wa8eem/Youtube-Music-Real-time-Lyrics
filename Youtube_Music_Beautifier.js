@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Music Beautifier
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.1.0
 // @description  Elevate your YouTube Music Experience with time-synced lyrics, beautiful animated backgrounds, and enhanced controls!
 // @author       Based on YouTube Music Beautifier Extension by Natesh Vemuri
 // @match        https://music.youtube.com/*
@@ -446,7 +446,8 @@
         const lyricsContainer = document.getElementById('ytm-lyrics-content');
         if (!lyricsContainer) return;
 
-        lyricsContainer.innerHTML = '';
+    // Clear existing content safely (avoid innerHTML assignment to satisfy Trusted Types)
+    lyricsContainer.textContent = '';
         
         // Add padding divs
         for (let i = 0; i < 3; i++) {
@@ -1010,21 +1011,55 @@
 
         const lyricsCard = document.createElement('div');
         lyricsCard.id = 'ytm-lyrics-card';
-        lyricsCard.innerHTML = `
-            <div id="ytm-lyrics-header">
-                <div id="ytm-song-info">
-                    <div id="ytm-song-title">No song playing</div>
-                    <div id="ytm-song-artist">YouTube Music</div>
-                </div>
-                <div id="ytm-lyrics-controls">
-                    <button class="ytm-mini-control" id="ytm-minimize-btn" title="Minimize">−</button>
-                    <button class="ytm-mini-control" id="ytm-close-btn" title="Close">&times;</button>
-                </div>
-            </div>
-            <div id="ytm-lyrics-content">
-                <div class="ytm-lyric-line">🎵 Loading lyrics...</div>
-            </div>
-        `;
+        // Build header
+        const header = document.createElement('div');
+        header.id = 'ytm-lyrics-header';
+
+        const songInfo = document.createElement('div');
+        songInfo.id = 'ytm-song-info';
+
+        const songTitle = document.createElement('div');
+        songTitle.id = 'ytm-song-title';
+        songTitle.textContent = 'No song playing';
+
+        const songArtist = document.createElement('div');
+        songArtist.id = 'ytm-song-artist';
+        songArtist.textContent = 'YouTube Music';
+
+        songInfo.appendChild(songTitle);
+        songInfo.appendChild(songArtist);
+
+        const controls = document.createElement('div');
+        controls.id = 'ytm-lyrics-controls';
+
+        const minimizeBtn = document.createElement('button');
+        minimizeBtn.className = 'ytm-mini-control';
+        minimizeBtn.id = 'ytm-minimize-btn';
+        minimizeBtn.title = 'Minimize';
+        minimizeBtn.textContent = '−';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'ytm-mini-control';
+        closeBtn.id = 'ytm-close-btn';
+        closeBtn.title = 'Close';
+        closeBtn.textContent = '×';
+
+        controls.appendChild(minimizeBtn);
+        controls.appendChild(closeBtn);
+
+        header.appendChild(songInfo);
+        header.appendChild(controls);
+
+        const content = document.createElement('div');
+        content.id = 'ytm-lyrics-content';
+
+        const loadingLine = document.createElement('div');
+        loadingLine.className = 'ytm-lyric-line';
+        loadingLine.textContent = '🎵 Loading lyrics...';
+        content.appendChild(loadingLine);
+
+        lyricsCard.appendChild(header);
+        lyricsCard.appendChild(content);
 
         document.body.appendChild(lyricsCard);
         beautifierContainer = lyricsCard;
@@ -1038,13 +1073,13 @@
         let xOffset = 0;
         let yOffset = 0;
 
-        const header = document.getElementById('ytm-lyrics-header');
+        const headerEl = document.getElementById('ytm-lyrics-header');
         
-        header.addEventListener('mousedown', (e) => {
+        headerEl.addEventListener('mousedown', (e) => {
             initialX = e.clientX - xOffset;
             initialY = e.clientY - yOffset;
             
-            if (e.target === header || e.target.closest('#ytm-song-info')) {
+            if (e.target === headerEl || e.target.closest('#ytm-song-info')) {
                 isDragging = true;
             }
         });
@@ -1078,13 +1113,37 @@
         launcher.id = 'ytm-launcher';
         launcher.setAttribute('aria-label', 'Show lyrics');
         launcher.setAttribute('title', 'Show lyrics');
-        launcher.innerHTML = `
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-                <path d="M4 6H20V18H8L4 22V6Z" fill="white" opacity="0.95"/>
-                <path d="M7 9H17" stroke="rgba(0,0,0,0.12)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Lyrics</span>
-        `;
+        // Build launcher contents without innerHTML to satisfy TrustedHTML requirements
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('width', '18');
+        svg.setAttribute('height', '18');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+
+        const path1 = document.createElementNS(svgNS, 'path');
+        path1.setAttribute('d', 'M4 6H20V18H8L4 22V6Z');
+        path1.setAttribute('fill', 'white');
+        path1.setAttribute('opacity', '0.95');
+
+        const path2 = document.createElementNS(svgNS, 'path');
+        path2.setAttribute('d', 'M7 9H17');
+        path2.setAttribute('stroke', 'rgba(0,0,0,0.12)');
+        path2.setAttribute('stroke-width', '1.5');
+        path2.setAttribute('stroke-linecap', 'round');
+        path2.setAttribute('stroke-linejoin', 'round');
+
+        svg.appendChild(path1);
+        svg.appendChild(path2);
+
+        const span = document.createElement('span');
+        span.textContent = 'Lyrics';
+
+        launcher.appendChild(svg);
+        launcher.appendChild(span);
         launcher.onclick = showLyricsCard;
         document.body.appendChild(launcher);
         return launcher;
@@ -1115,11 +1174,11 @@
         
         if (content.style.display === 'none') {
             content.style.display = 'block';
-            minimizeBtn.innerHTML = '−';
+            minimizeBtn.textContent = '−';
             minimizeBtn.title = 'Minimize';
         } else {
             content.style.display = 'none';
-            minimizeBtn.innerHTML = '+';
+            minimizeBtn.textContent = '+';
             minimizeBtn.title = 'Expand';
         }
     }
