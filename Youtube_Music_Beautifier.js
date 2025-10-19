@@ -157,36 +157,44 @@
             method: 'GET',
             url: REST_URL + "/request-lyrics/" + urlAddon,
             onload: function(response) {
-                console.log("Lyrics response:", response.responseText);
+                console.log("Lyrics response:", response.responseText.substring(0, 100) + "...");
                 if (response.responseText === "no_lyrics_found" || response.responseText.includes("<title>500 Internal Server Error</title>")) {
-                    console.log("No lyrics found");
-                    lyrics = [];
-                    times = [];
+                    console.log("No lyrics found for this song");
+                    lyrics = ["No lyrics available"];
+                    times = [0];
+                    initializeLyrics();
                 } else {
                     try {
                         const result = JSON.parse(response.responseText);
                         const data = result["lrc"];
+                        console.log("Found lyrics with source:", result["source"]);
+                        
                         if (result["source"] === "unofficial") {
                             parseUnofficialLyrics(data);
                         } else if (result["source"] === "ytm") {
                             parseYTMLyrics(data);
                         }
+                        
                         if (times.length === 0) {
-                            lyrics = [];
-                            times = [];
+                            lyrics = ["Lyrics parsing failed"];
+                            times = [0];
                         }
+                        
+                        console.log(`Parsed ${lyrics.length} lyric lines`);
                         initializeLyrics();
                     } catch (e) {
                         console.error("Error parsing lyrics:", e);
-                        lyrics = [];
-                        times = [];
+                        lyrics = ["Error loading lyrics"];
+                        times = [0];
+                        initializeLyrics();
                     }
                 }
             },
             onerror: function(error) {
                 console.error('Lyrics fetch error:', error);
-                lyrics = [];
-                times = [];
+                lyrics = ["Failed to fetch lyrics"];
+                times = [0];
+                initializeLyrics();
             }
         });
     }
@@ -196,28 +204,41 @@
         lyrics = [];
         times = [];
         
+        let lyricIndex = 0;
         for (let i = 0; i < allTextLines.length; i++) {
             if (allTextLines[i].search(/^(\[)(\d*)(:)(.*)(\])(.*)/i) >= 0) {
                 const line = allTextLines[i].match(/^(\[)(\d*)(:)(.*)(\])(.*)/i);
-                times[i] = (parseInt(line[2]) * 60) + parseInt(line[4]);
-                lyrics[i] = line[6];
+                times[lyricIndex] = (parseInt(line[2]) * 60) + parseInt(line[4]);
+                lyrics[lyricIndex] = line[6];
+                lyricIndex++;
             }
         }
         
+        // Clean up empty or unwanted lyrics
         for (let i = 0; i < lyrics.length; i++) {
             if (lyrics[i] === " " || lyrics[i] === '' || lyrics[i]?.substring(1, 3) === "作曲" || lyrics[i]?.substring(1, 3) === "作词") {
                 lyrics[i] = "♪♪";
             }
         }
+        
+        // Remove undefined entries
+        lyrics = lyrics.filter((lyric, index) => lyric !== undefined && times[index] !== undefined);
+        times = times.filter(time => time !== undefined);
     }
 
     function parseYTMLyrics(data) {
         lyrics = [];
         times = [];
         for (let i = 0; i < data.length; i++) {
-            lyrics[i] = data[i].text;
+            let lyricText = data[i].text;
+            // Replace music note symbols with proper display
+            if (lyricText === "♪" || lyricText.trim() === "") {
+                lyricText = "♪♪";
+            }
+            lyrics[i] = lyricText;
             times[i] = Math.floor(data[i].time);
         }
+        console.log(`Parsed YTM lyrics: ${lyrics.length} lines`);
     }
 
     // CSS Styles
@@ -324,11 +345,19 @@
             cursor: pointer;
             opacity: 0.8;
             transition: opacity 0.2s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            user-select: none;
         }
 
         .ytm-control-button:hover {
             opacity: 1;
             transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.2);
         }
 
         #ytm-lyrics-panel {
@@ -660,11 +689,25 @@
     function triggerNext() {
         const nextButton = document.querySelector(".next-button.style-scope.ytmusic-player-bar");
         nextButton?.click();
+        // Force update after a short delay
+        setTimeout(() => {
+            const songData = getNowPlaying();
+            if (songData) {
+                updateUI(songData);
+            }
+        }, 500);
     }
 
     function triggerPrevious() {
         const prevButton = document.querySelector(".previous-button.style-scope.ytmusic-player-bar");
         prevButton?.click();
+        // Force update after a short delay
+        setTimeout(() => {
+            const songData = getNowPlaying();
+            if (songData) {
+                updateUI(songData);
+            }
+        }, 500);
     }
 
     // Offset Management
@@ -702,9 +745,9 @@
                         <div id="ytm-progress-bar"></div>
                     </div>
                     <div id="ytm-controls">
-                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTM1IDI1TDE1IDEwVjQwTDM1IDI1WiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4K" class="ytm-control-button" id="ytm-prev-button" alt="Previous">
-                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTIwIDEwVjQwTDM1IDI1TDIwIDEwWiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4K" class="ytm-control-button" id="ytm-play-button" alt="Play/Pause">
-                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTE1IDI1TDM1IDEwVjQwTDE1IDI1WiIgZmlsbD0id2hpdGUiLz4KPHN2Zz4K" class="ytm-control-button" id="ytm-next-button" alt="Next">
+                        <div class="ytm-control-button" id="ytm-prev-button" title="Previous">⏮</div>
+                        <div class="ytm-control-button" id="ytm-play-button" title="Play/Pause">⏯</div>
+                        <div class="ytm-control-button" id="ytm-next-button" title="Next">⏭</div>
                     </div>
                 </div>
                 <div id="ytm-lyrics-panel">
@@ -837,6 +880,17 @@
         }
     }
 
+    // Force refresh function for manual updates
+    function forceRefresh() {
+        setTimeout(() => {
+            const songData = getNowPlaying();
+            if (songData && beautifierContainer && beautifierContainer.classList.contains('active')) {
+                console.log("Force refreshing song data:", songData.title);
+                updateUI(songData);
+            }
+        }, 100);
+    }
+
     // Initialize
     function init() {
         console.log("[YouTube Music Beautifier Userscript] Starting...");
@@ -850,11 +904,25 @@
         // Watch for DOM changes
         const playerBar = document.querySelector("ytmusic-player-bar");
         if (playerBar) {
-            const observer = new MutationObserver(monitorYouTubeMusic);
+            const observer = new MutationObserver(() => {
+                monitorYouTubeMusic();
+                // Additional check for song changes
+                forceRefresh();
+            });
             observer.observe(playerBar, {
                 childList: true,
                 subtree: true,
                 attributes: true
+            });
+        }
+
+        // Also watch the main content area for navigation changes
+        const mainContent = document.querySelector('#main-panel');
+        if (mainContent) {
+            const contentObserver = new MutationObserver(forceRefresh);
+            contentObserver.observe(mainContent, {
+                childList: true,
+                subtree: false
             });
         }
 
