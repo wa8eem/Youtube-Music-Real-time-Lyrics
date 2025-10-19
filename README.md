@@ -3,151 +3,121 @@ YouTube Music Beautifier — README
 
 [![Install on Greasy Fork](https://img.shields.io/badge/Install-Greasy%20Fork-brightgreen.svg)](https://greasyfork.org/en/scripts/553103-youtube-music-beautifier)
 
-A userscript that adds a compact, floating time-synced lyrics card to YouTube Music (music.youtube.com), with clickable lyrics that seek playback. Designed for Tampermonkey (Chrome/Chromium) and userscript runners on Safari (Tampermonkey or Userscripts-compatible apps).
+Compact userscript that adds a floating, time-synced lyrics card to YouTube Music (music.youtube.com). Clickable lyric lines seek playback, and the UI includes romanization, per-line translation, per-line sync controls, font/resizing controls, and developer debug helpers. Designed for Tampermonkey and compatible userscript runners.
 
 Quick links
 -----------
 - Script file: `Youtube_Music_Beautifier.js`
 - Compatible site: https://music.youtube.com/*
- - Greasy Fork: https://greasyfork.org/en/scripts/553103-youtube-music-beautifier
+- Guide for the undocumented Google Translate endpoints: `TRANSLATE_API_GUIDE.md`
+- Python examples for testing translate endpoints: `translate_examples.py`
 
-Install via Greasy Fork
------------------------
-If you prefer a one-click install, users can install the script from Greasy Fork:
+Highlights (new features since initial release)
+---------------------------------------------
+- Romanization (per-line): automatic transliteration/romanization of non-Latin scripts using the Google Translate undocumented endpoint (dt=rm). Toggleable via the "Aa" button.
+- Translation (per-line + Translate All): per-line translation buttons and a "T→all" button to translate the entire lyrics card. Language selector + freeform language-code input provided.
+- Persisted translation target: the selected target language is remembered across sessions (stored with `gmSet`) so the UI restores your last choice.
+- Per-line sync controls: each line has a sync (⤴) button that sets an in-memory offset so the clicked line appears as the current lyric. Undo (↶) and reset (⤶) are available. Offsets are intentionally kept in-memory (not persisted per-song) unless explicitly changed.
+- Duration-aware time normalization: robust parsing for JSON/LRC providers with heuristics to convert millisecond timestamps to seconds when appropriate (based on song duration and median/max heuristics).
+- Adaptive seeking: the script reads playback time from multiple sources (media element, player-bar DOM, nowPlaying()) and biases seeking attempts to match the source (media-first vs progress-bar-first) to improve reliability.
+- Improved progress-bar seeking: tries shadowRoot search, updates slider properties (`value`, `immediateValue`, `_setValue`, `aria-valuenow`) and simulates pointer events on `elementFromPoint` where necessary.
+- Debugging & diagnostics: verbose debug logs, top-level captures (e.g., `window._ytm_last_lyrics_response`, `window._ytm_parsed_times`) and an exposed API `window.ytmBeautifier` for testing and diagnostics.
+- GM fallbacks & safer storage handling: localStorage fallbacks for GM_* APIs plus safer parsing on read.
 
-https://greasyfork.org/en/scripts/553103-youtube-music-beautifier
-
-When you publish on Greasy Fork, Greasy Fork will display an install button that users can click to add the script to Tampermonkey or other userscript managers.
-
-What it does
-------------
-- Fetches time-synced lyrics from a remote lyrics service and shows them in a compact floating card.
-- Lets you click a lyric line to seek the track to that timestamp.
-- Keeps lyrics synced when you manually seek using the YouTube Music progress bar.
-- Provides console debug helpers to diagnose seeking and media issues.
-
-Installation
-------------
-Choose one of the following (recommended: install via Greasy Fork once uploaded):
+Install
+-------
+Same installation approaches as before (Greasy Fork preferred for one-click installs):
 
 1) Install via Greasy Fork (recommended)
-   - Create a Greasy Fork account and submit a new userscript.
-   - Copy the contents of `Youtube_Music_Beautifier.js` into the script body on Greasy Fork.
-   - Fill the metadata fields (see "Greasy Fork submission tips").
-   - Publish the script. Users can then install via the Greasy Fork install page.
+   - Install from: https://greasyfork.org/en/scripts/553103-youtube-music-beautifier
 
-2) Manual install (Tampermonkey — Chrome / Chromium / Edge)
-   - Install the Tampermonkey extension from the Chrome Web Store.
-   - Open Tampermonkey dashboard → Add a new script → paste the contents of `Youtube_Music_Beautifier.js` → Save.
-   - Make sure the script is enabled and the @match is `https://music.youtube.com/*`.
+2) Manual (Tampermonkey / Chromium / Edge)
+   - Paste `Youtube_Music_Beautifier.js` into a new script in Tampermonkey and enable it.
 
-3) Manual install (Safari)
-   - If you use Tampermonkey for Safari, you can follow the same steps as for Chrome.
-   - Alternatively use a Safari-compatible userscript manager (for example Userscripts.app or similar). Add a new script and paste `Youtube_Music_Beautifier.js`.
+3) Manual (Safari or other userscript runners)
+   - Use your userscript manager to add the script. Ensure the manager provides the requested GM_* grants or allow localStorage fallbacks.
 
-Notes on permissions
---------------------
-The script requests/uses the following grants (declared in the script header):
-- GM_xmlhttpRequest — used to fetch lyrics from the remote lyrics API.
-- GM_addStyle, GM_getValue, GM_setValue — used for styling and small persisted settings.
+Permissions
+-----------
+The script uses the following grants (metadata header):
+- `GM_xmlhttpRequest` — recommended for fetching lyrics and translate endpoints from userscripts (avoids CORS in many setups).
+- `GM_addStyle`, `GM_getValue`, `GM_setValue` — used for styling and saving small settings.
 
-When submitting to Greasy Fork, these grants will be shown to users; Tampermonkey will prompt for cross-origin permission for the GM_xmlhttpRequest call when required.
+If your userscript runner does not provide GM_xmlhttpRequest, the script will fall back to `fetch`, which can be blocked by CORS in some browsers. Using Tampermonkey with cross-domain permission avoids most issues.
 
-How to use
-----------
-- Open https://music.youtube.com and play a song.
-- Click the launcher button (bottom-right) to open the floating lyrics card.
-- Keyboard shortcuts while the card is open:
-  - Ctrl/Cmd + L — open the lyrics card
-  - Escape — close the lyrics card
-- In the lyrics card:
-  - Click any lyric line to seek the track to that line's timestamp.
-  - Use the minimize (−) button to collapse the card, or × to close it.
+Usage & Controls
+----------------
+- Launcher: a floating "Lyrics" launcher button toggles the lyrics card.
+- Romanization toggle: "Aa" button toggles per-line romanized text.
+- Translate target: select a language from the dropdown or type a freeform language code (press Enter). The chosen language is persisted.
+- Translate All: click "T→all" to translate every visible line (cached per-text+target to avoid repeated calls).
+- Per-line translate: each line has a translate button (T→xx) that translates that single line on demand.
+- Sync controls:
+  - ⤴ (per-line): set this line as current (computes offset = currentPlaybackTime - lineTime). This stores previous offset in-memory so you can undo.
+  - ↶ (undo): revert to the previous offset (in-memory only).
+  - ⤶ (reset): clear the offset for the current song.
+- Font & resize: A and arrow buttons increase/decrease font and resize the card; size persists.
 
-Developer & Debugging helpers
------------------------------
-Open the browser Developer Console and use the following functions exposed on `window.ytmBeautifier`:
+Developer & Debugging API
+-------------------------
+Exposed helper on `window.ytmBeautifier`:
 
-- window.ytmBeautifier.show() / .hide()
-  - Show or hide the lyrics card programmatically.
+- `show()` / `hide()` — show or hide the card
+- `getNowPlaying()` — returns detected track metadata (title, artist, elapsed, total...)
+- `getSongLyrics(title, artist, album)` — manually fetch lyrics via the configured `REST_URL`
+- `romanize(text, source_language, options)` — call the romanize helper
+- `reattachMedia()` — reattach media event listeners (if the page replaced the player)
+- `setDebug(boolean)` — toggle verbose debugging logs
+- `debugSeek(target)` — diagnostic dump of candidates for seeking (progress slider, video elements, player APIs)
+- `testSeek(t)` — exercise a few seek methods programmatically
 
-- window.ytmBeautifier.getNowPlaying()
-  - Returns the script's best-effort object describing the current track (title, artist, elapsed, total, etc.).
+When debugging, enable logs:
 
-- window.ytmBeautifier.debugSeek(targetSeconds)
-  - Prints a detailed diagnostic summary of the player DOM, progress bars, media elements and available player APIs. Use when seeking fails.
+```js
+window.ytmBeautifier.setDebug(true);
+```
 
-- window.ytmBeautifier.testSeek(seconds)
-  - Runs the built-in seek tests (tries several seeking methods). Useful for quickly exercising the seeking pipelines.
+And try reproducing an issue with:
 
-- window.ytmBeautifier.reattachMedia()
-  - Reattach internal media event listeners (useful if the player has been re-created by the page and the userscript missed the change).
+```js
+window.ytmBeautifier.debugSeek(60);
+window.ytmBeautifier.testSeek(60);
+```
 
-Troubleshooting
----------------
-If clicking lyrics doesn't seek or the lyrics lose sync after manual seeks, try the following in order:
+Internal behavior notes (for contributors)
+-----------------------------------------
+- Lyrics parsing: the script tolerantly handles LRC and several JSON shapes. After extracting times it runs `normalizeTimes(times, songDuration)` which uses median/max heuristics to decide if times are in milliseconds and need dividing by 1000.
+- Seeking pipeline: `getPlaybackTime()` detects playback time from the media element, player-bar DOM, or `nowPlaying().elapsed`. `simulateSeek(target, preferredSource)` tries seeking methods in an order biased by the preferred source (media-first vs progress-first).
+- Progress-bar seeking: `tryProgressSeek` probes DOM and shadow roots, tries to set `value`/`immediateValue`/`_setValue` properties, sets `aria-valuenow`, dispatches `input/change`, and falls back to pointer events via `elementFromPoint`.
+- Translation: uses `translate_a/single` undocumented endpoint. See `TRANSLATE_API_GUIDE.md` for details and client examples. For userscript use prefer GM_xmlhttpRequest (gmXhr wrapper) to avoid CORS.
 
-1. Open the Console (DevTools) and run:
-   - window.ytmBeautifier.debugSeek(60)
-   - This prints which DOM elements, media elements, and APIs the script can see and any errors encountered.
+Files added
+-----------
+- `TRANSLATE_API_GUIDE.md` — short guide on the undocumented Google Translate endpoints used (dt flags, transliteration, parsing tips).
+- `translate_examples.py` — runnable Python examples that call the `translate_a/single` endpoint and demonstrate parsing translation/transliteration responses.
 
-2. Force a reattach of the media listeners:
-   - window.ytmBeautifier.reattachMedia()
-   - Then manually seek using the progress bar and observe console logs.
-
-3. Use the test utility to exercise seek methods:
-   - window.ytmBeautifier.testSeek(60)
-   - This runs several seek approaches and reports results.
-
-4. Check extension permissions / Greasy Fork install:
-   - Ensure the userscript manager is allowed to run on `music.youtube.com`.
-   - If the lyrics API is unreachable, the script will show a "No lyrics available" message; try again later or check network / API host availability.
-
-5. If you see errors mentioning cross-origin requests:
-   - In Tampermonkey you may need to allow the GM_xmlhttpRequest cross-domain permission for the script (the Greasy Fork UI or the extension will guide this).
-
-Offset adjustments and saved settings
-------------------------------------
-- The script supports storing per-song offset corrections (if you manually tweak lyric timing later, the script persists per-song offsets).
-- Offsets are stored via the userscript storage API or in localStorage under the prefix `ytm_beautifier_` when GM_* is not available. You can inspect or edit them in the browser console/localStorage.
+Troubleshooting checklist
+-------------------------
+1. Enable debug logs: `window.ytmBeautifier.setDebug(true)` and reproduce the issue.
+2. Run `window.ytmBeautifier.debugSeek(60)` to log candidate progress elements and APIs.
+3. Try `window.ytmBeautifier.reattachMedia()` if the player DOM changed.
+4. If translate or remote lyrics calls fail due to CORS, ensure your userscript manager allows cross-origin requests or run the translation server-side using `translate_examples.py` as a template.
 
 Privacy & Remote API
 --------------------
-- Lyrics are fetched from the remote service configured in the script (`https://ytm.nwvbug.com` by default).
-- When a lyrics request is made the script sends the song title/artist/album information to that service to find matching lyric files. If you prefer to self-host or change the provider, edit the `REST_URL` constant at the top of `Youtube_Music_Beautifier.js` before installing.
-
-Greasy Fork submission tips
----------------------------
-When you upload the script to Greasy Fork, include these items in the script page:
-- Title: "YouTube Music Beautifier"
-- Description: Short summary + mention lyric fetching from remote service.
-- Version number and changelog entries for updates.
-- Script header metadata (the header block at the top of `Youtube_Music_Beautifier.js` is already suitable). Ensure @match = `https://music.youtube.com/*`.
-- Required grants: GM_addStyle, GM_setValue, GM_getValue, GM_xmlhttpRequest.
-- License: add the repository license (see `LICENSE` file). Choose MIT or the license present in the repository.
-- Screenshots: add a screenshot of the floating lyrics card to attract users.
-
-FAQ / Common notes
-------------------
-- Q: "Why do lyrics sometimes say 'No lyrics available'?"
-  - A: The script relies on a remote service which may not have a match for every song, or the service may be temporarily down.
-
-- Q: "Seeking doesn't work in my browser"
-  - A: Different browsers/userscript runners handle synthetic events differently. Use the debug helpers above and ensure your userscript manager has the required permissions.
-
-- Q: "I want the lyrics to always show on page load"
-  - A: The script creates a small launcher button. If you want auto-show behavior consider modifying `init()` in `Youtube_Music_Beautifier.js` to call `showLyricsCard()` after initialization.
+Lyrics requests contact the configured `REST_URL` (default: `https://ytm.nwvbug.com`). The script sends title/artist/album to look up lyrics. If you prefer to self-host, change the `REST_URL` constant in `Youtube_Music_Beautifier.js` before installing.
 
 Contributing
 ------------
-Pull requests and issues are welcome. Please include console logs (from `debugSeek`) when reporting seek-related bugs — they make diagnosing issues fast.
+PRs, issues and logs are welcome. When reporting seeking or timing issues include the output of `window.ytmBeautifier.debugSeek(...)` and browser/extension details.
 
 License
 -------
-See the `LICENSE` file in this repository for licensing details.
+See the `LICENSE` file for license details (MIT or repository license).
 
 Contact
 -------
-Create an issue in this repository or link to the Greasy Fork script page once uploaded. Provide browser/version and userscript manager details when you report problems.
+Open an issue in this repository or include console logs and the userscript manager details when reporting problems.
+
 # Youtube-Music-Real-time-Lyrics
 Bring Real Time Lyrics on https://music.youtube.com
