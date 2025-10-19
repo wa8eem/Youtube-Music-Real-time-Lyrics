@@ -15,6 +15,101 @@
 (function() {
     'use strict';
 
+    // Suppress noisy network/CORS/content-blocker errors coming from YouTube Music internals.
+    // These originate from cross-origin telemetry/fetches and content blockers and clutter the console.
+    // We add lightweight filters so only unexpected, real errors show up.
+    (function installGlobalErrorFilters() {
+        const isNoisyNetworkError = (msg) => {
+            if (!msg || typeof msg !== 'string') return false;
+            const patterns = [
+                'XMLHttpRequest cannot load',
+                'Fetch API cannot load',
+                'Resource blocked by content blocker',
+                'due to access control checks'
+            ];
+            return patterns.some(p => msg.includes(p));
+        };
+
+        // Additional detector for specific YouTube Music telemetry endpoints
+        const isYouTubeTelemetry = (msg) => {
+            if (!msg || typeof msg !== 'string') return false;
+            // common endpoints that were noisy in the logs
+            const endpoints = [
+                'music.youtube.com/api/stats/atr',
+                'music.youtube.com/api/stats/qoe',
+                'music.youtube.com/youtubei/v1/log_event'
+            ];
+            return endpoints.some(e => msg.includes(e));
+        };
+
+        // In-memory buffer of suppressed messages for later debugging if needed
+        window._ytmBeautifierSuppressed = window._ytmBeautifierSuppressed || [];
+
+        // Wrap console.error and console.warn to filter out noisy messages
+        try {
+            const wrapConsole = (methodName) => {
+                const orig = console[methodName].bind(console);
+                console[methodName] = function(...args) {
+                    try {
+                        const text = args.map(a => {
+                            if (typeof a === 'string') return a;
+                            if (a && a.message) return a.message;
+                            try { return JSON.stringify(a); } catch (e) { return String(a); }
+                        }).join(' ');
+
+                        if (isNoisyNetworkError(text) || isYouTubeTelemetry(text)) {
+                            // store a small record and swallow the noisy message
+                            window._ytmBeautifierSuppressed.push({ t: Date.now(), args });
+                            // Keep the buffer small
+                            if (window._ytmBeautifierSuppressed.length > 200) window._ytmBeautifierSuppressed.shift();
+                            return; // prevent noisy output
+                        }
+                    } catch (e) {
+                        // fall through to original
+                    }
+                    return orig(...args);
+                };
+            };
+            wrapConsole('error');
+            wrapConsole('warn');
+        } catch (e) {
+            // If console can't be wrapped for some reason, ignore and continue
+        }
+
+        // Window error handler
+        const origOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+            try {
+                if (isNoisyNetworkError(String(message))) {
+                    // swallow the noisy network/CORS/content-blocker error
+                    return true; // prevents the error being logged to console by browser
+                }
+            } catch (e) {
+                // fall through to original handler
+            }
+            if (typeof origOnError === 'function') {
+                return origOnError.apply(this, arguments);
+            }
+            return false;
+        };
+
+        // Unhandled promise rejections (Fetch API and XHR sometimes manifest here)
+        const origUnhandled = window.onunhandledrejection;
+        window.addEventListener('unhandledrejection', (ev) => {
+            try {
+                const reason = ev?.reason;
+                const msg = typeof reason === 'string' ? reason : (reason && reason.message) ? reason.message : '';
+                if (isNoisyNetworkError(String(msg))) {
+                    ev.preventDefault(); // try to stop the browser from logging it
+                    return;
+                }
+            } catch (e) {}
+            if (typeof origUnhandled === 'function') {
+                try { origUnhandled(ev); } catch (e) {}
+            }
+        });
+    })();
+
     // Fallback functions for GM API
     const gmGetValue = (key, defaultValue) => {
         if (typeof GM_getValue !== 'undefined') {
