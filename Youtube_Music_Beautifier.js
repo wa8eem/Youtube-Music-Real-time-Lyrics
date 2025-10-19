@@ -506,41 +506,138 @@
     }
 
     function simulateSeek(targetTime) {
-        console.log(`Seeking to ${targetTime} seconds`);
-        
-        // Get current song data to know current position
+        console.log(`\n=== simulateSeek: target ${targetTime}s ===`);
+
         const songData = getNowPlaying();
-        if (!songData) return;
-        
-        const currentTime = songData.elapsed;
-        const timeDifference = targetTime - currentTime;
-        
-        // If the difference is small (less than 2 seconds), don't seek
-        if (Math.abs(timeDifference) < 2) {
-            console.log("Time difference too small, skipping seek");
+        if (!songData) {
+            console.log("simulateSeek: no song data");
             return;
         }
-        
-        // Try multiple seeking methods in order of preference
-        const seekMethods = [
-            () => tryProgressBarSeek(targetTime, songData.total),
-            () => trySliderSeek(targetTime, songData.total),
-            () => tryVideoPlayerSeek(targetTime, songData.total),
-            () => fallbackKeyboardSeek(timeDifference)
-        ];
-        
-        for (const method of seekMethods) {
-            try {
-                if (method()) {
-                    console.log("Seeking method succeeded");
-                    return;
-                }
-            } catch (error) {
-                console.log("Seeking method failed:", error);
-            }
+
+        const current = songData.elapsed;
+        const diff = targetTime - current;
+        console.log(`Current: ${current}s, diff: ${diff}s`);
+
+        // If the difference is negligible, skip
+        if (Math.abs(diff) < 0.8) {
+            console.log('simulateSeek: difference < 0.8s, skipping');
+            return;
         }
-        
-        console.log("All seeking methods failed");
+
+        // Preferred order: media element -> ytmusic app API -> UI interactions
+        try {
+            if (trySeekViaMediaElement(targetTime)) {
+                console.log('simulateSeek: seeked via media element');
+                return;
+            }
+        } catch (e) { console.log('media element seek error', e); }
+
+        try {
+            if (trySeekViaYtMusicApp(targetTime)) {
+                console.log('simulateSeek: seeked via ytmusic-app API');
+                return;
+            }
+        } catch (e) { console.log('ytmusic-app seek error', e); }
+
+        // Fallback to previous UI-based methods
+        try {
+            if (tryProgressBarSeek(targetTime, songData.total)) {
+                console.log('simulateSeek: seeked via progress bar');
+                return;
+            }
+        } catch (e) { console.log('progress bar seek error', e); }
+
+        try {
+            if (tryVideoPlayerSeek(targetTime, songData.total)) {
+                console.log('simulateSeek: seeked via video element');
+                return;
+            }
+        } catch (e) { console.log('video player seek error', e); }
+
+        // Last resort: keyboard navigation
+        try {
+            fallbackKeyboardSeek(diff);
+            console.log('simulateSeek: fallbackKeyboardSeek triggered');
+        } catch (e) { console.log('fallback keyboard error', e); }
+    }
+
+    // Attempt to set currentTime on any visible HTMLMediaElement (video/audio)
+    function trySeekViaMediaElement(targetTime) {
+        try {
+            const media = Array.from(document.querySelectorAll('video, audio'))
+                .filter(m => m && !isNaN(m.duration) && m.duration > 0 && m.offsetParent !== null)[0];
+
+            if (!media) {
+                console.log('trySeekViaMediaElement: no visible media element found');
+                return false;
+            }
+
+            console.log('trySeekViaMediaElement: using media element', media);
+
+            // Some media elements on YT are controlled via wrappers; attempt direct set
+            try {
+                media.currentTime = targetTime;
+            } catch (e) {
+                console.log('trySeekViaMediaElement: direct set failed', e);
+            }
+
+            // Dispatch events to notify player
+            media.dispatchEvent(new Event('seeking'));
+            media.dispatchEvent(new Event('timeupdate'));
+            media.dispatchEvent(new Event('seeked'));
+
+            // Verify after short delay
+            setTimeout(() => {
+                console.log('trySeekViaMediaElement: after set currentTime ->', media.currentTime);
+            }, 200);
+
+            return true;
+        } catch (e) {
+            console.log('trySeekViaMediaElement error', e);
+            return false;
+        }
+    }
+
+    // Attempt to call the ytmusic-app's internal API if available
+    function trySeekViaYtMusicApp(targetTime) {
+        try {
+            const app = document.querySelector('ytmusic-app');
+            if (!app) {
+                console.log('trySeekViaYtMusicApp: ytmusic-app not found');
+                return false;
+            }
+
+            // Common API entry points
+            const candidates = [
+                app.playerApi_,
+                app.player_,
+                app.playerApi,
+                app.appContext_ && app.appContext_.playerApi,
+                window.ytplayer,
+                window.yt && window.yt.player
+            ];
+
+            for (const api of candidates) {
+                if (!api) continue;
+                if (typeof api.seekTo === 'function') {
+                    try { api.seekTo(targetTime); console.log('trySeekViaYtMusicApp: used seekTo'); return true; } catch (e) { console.log('api.seekTo failed', e); }
+                }
+                if (typeof api.setCurrentTime === 'function') {
+                    try { api.setCurrentTime(targetTime); console.log('trySeekViaYtMusicApp: used setCurrentTime'); return true; } catch (e) { console.log('api.setCurrentTime failed', e); }
+                }
+                // Some APIs accept an object call
+                try {
+                    if (api.player && typeof api.player.seekTo === 'function') {
+                        api.player.seekTo(targetTime); console.log('trySeekViaYtMusicApp: used api.player.seekTo'); return true;
+                    }
+                } catch (e) {}
+            }
+
+            return false;
+        } catch (e) {
+            console.log('trySeekViaYtMusicApp error', e);
+            return false;
+        }
     }
     
     function tryProgressBarSeek(targetTime, totalTime) {
