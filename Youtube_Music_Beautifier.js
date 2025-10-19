@@ -75,9 +75,6 @@
     let currentTime = -1;
     let currentIndex = 0;
     let incomingSecondOffset = 0;
-    let doAnimation = gmGetValue('animation', true);
-    let backgroundBlur = gmGetValue('backgroundBlur', 0.15);
-    let isFullscreen = false;
     let beautifierContainer = null;
 
     // Utility Functions
@@ -245,182 +242,117 @@
     const styles = `
         @import url('https://fonts.googleapis.com/css2?family=Host+Grotesk:ital,wght@0,300..800;1,300..800&display=swap');
 
-        #ytm-beautifier {
+        #ytm-lyrics-card {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: black;
-            z-index: 10000;
+            top: 20px;
+            right: 20px;
+            width: 350px;
+            max-height: 80vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
             font-family: "Host Grotesk", serif;
             color: white;
+            z-index: 10000;
             display: none;
-        }
-
-        #ytm-beautifier.active {
-            display: flex;
-        }
-
-        #ytm-background-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -2;
-        }
-
-        #ytm-main-content {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 5vw;
-            backdrop-filter: blur(1px);
-        }
-
-        #ytm-info-panel {
-            display: flex;
             flex-direction: column;
-            align-items: center;
-            max-width: 40vw;
-            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
         }
 
-        #ytm-album-image {
-            width: 300px;
-            height: 300px;
-            border-radius: 20px;
-            margin-bottom: 30px;
-            cursor: pointer;
-            transition: transform 0.2s;
+        #ytm-lyrics-card.active {
+            display: flex;
         }
 
-        #ytm-album-image:hover {
-            transform: scale(1.05);
-        }
-
-        #ytm-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
-        #ytm-artist-album {
-            font-size: 1.5rem;
-            font-weight: 400;
-            opacity: 0.8;
-            margin-bottom: 30px;
-        }
-
-        #ytm-progress-container {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
-            margin-bottom: 20px;
-            cursor: pointer;
-        }
-
-        #ytm-progress-bar {
-            height: 100%;
-            background: white;
-            border-radius: 3px;
-            width: 0%;
-            transition: width 0.1s;
-        }
-
-        #ytm-controls {
+        #ytm-lyrics-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             align-items: center;
-            gap: 30px;
+            justify-content: space-between;
+            cursor: grab;
         }
 
-        .ytm-control-button {
-            width: 50px;
-            height: 50px;
+        #ytm-lyrics-header:active {
+            cursor: grabbing;
+        }
+
+        #ytm-song-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        #ytm-song-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #ytm-song-artist {
+            font-size: 12px;
+            opacity: 0.7;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #ytm-lyrics-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .ytm-mini-control {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
             cursor: pointer;
-            opacity: 0.8;
-            transition: opacity 0.2s, transform 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            user-select: none;
+            font-size: 12px;
+            transition: all 0.2s ease;
         }
 
-        .ytm-control-button:hover {
-            opacity: 1;
-            transform: scale(1.1);
+        .ytm-mini-control:hover {
             background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
         }
 
-        #ytm-lyrics-panel {
-            max-width: 50vw;
-            height: 70vh;
+        #ytm-lyrics-content {
+            flex: 1;
             overflow-y: auto;
             padding: 20px;
-        }
-
-        #ytm-lyrics-container {
             text-align: center;
         }
 
         .ytm-lyric-line {
-            font-size: 2rem;
-            font-weight: 500;
+            font-size: 14px;
+            font-weight: 400;
             opacity: 0.4;
-            margin: 15px 0;
+            margin: 12px 0;
             transition: all 0.3s ease;
             cursor: pointer;
+            line-height: 1.4;
         }
 
         .ytm-lyric-line.active {
             opacity: 1;
-            font-weight: 800;
-            font-size: 2.5rem;
-            transform: scale(1.1);
+            font-weight: 600;
+            font-size: 16px;
+            color: #ff6b6b;
+            transform: scale(1.05);
         }
 
-        #ytm-toolbar {
-            position: absolute;
-            top: 30px;
-            right: 30px;
-            display: flex;
-            gap: 20px;
-            z-index: 1000;
-        }
-
-        .ytm-toolbar-button {
-            width: 40px;
-            height: 40px;
-            cursor: pointer;
-            opacity: 0.7;
-            transition: opacity 0.2s, transform 0.2s;
-        }
-
-        .ytm-toolbar-button:hover {
-            opacity: 1;
-            transform: scale(1.1);
-        }
-
-        #ytm-close-button {
-            position: absolute;
-            top: 30px;
-            left: 30px;
-            font-size: 2rem;
-            cursor: pointer;
-            opacity: 0.7;
-            transition: opacity 0.2s;
-        }
-
-        #ytm-close-button:hover {
-            opacity: 1;
+        .ytm-lyric-line:hover {
+            opacity: 0.8;
         }
 
         #ytm-launcher {
@@ -431,13 +363,16 @@
             color: white;
             border: none;
             border-radius: 50px;
-            padding: 15px 25px;
-            font-size: 16px;
+            padding: 12px 20px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             z-index: 9999;
             box-shadow: 0 4px 20px rgba(255, 107, 107, 0.3);
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         #ytm-launcher:hover {
@@ -446,156 +381,54 @@
             box-shadow: 0 6px 25px rgba(255, 107, 107, 0.4);
         }
 
-        @media (max-width: 1300px) {
-            #ytm-main-content {
-                flex-direction: column;
-                gap: 20px;
-            }
-            
-            #ytm-info-panel {
-                max-width: 90vw;
-            }
-            
-            #ytm-lyrics-panel {
-                max-width: 90vw;
-                height: 40vh;
-            }
-            
-            #ytm-album-image {
-                width: 200px;
-                height: 200px;
-            }
-            
-            #ytm-title {
-                font-size: 2rem;
-            }
-            
-            .ytm-lyric-line {
-                font-size: 1.5rem;
-            }
-            
-            .ytm-lyric-line.active {
-                font-size: 1.8rem;
-            }
-        }
-
         /* Scrollbar styling */
-        #ytm-lyrics-panel::-webkit-scrollbar {
-            width: 6px;
+        #ytm-lyrics-content::-webkit-scrollbar {
+            width: 4px;
         }
 
-        #ytm-lyrics-panel::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
+        #ytm-lyrics-content::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
         }
 
-        #ytm-lyrics-panel::-webkit-scrollbar-thumb {
+        #ytm-lyrics-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        #ytm-lyrics-content::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
         }
 
-        #ytm-lyrics-panel::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.5);
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #ytm-lyrics-card {
+                width: 300px;
+                right: 10px;
+                top: 10px;
+                max-height: 70vh;
+            }
+            
+            #ytm-launcher {
+                bottom: 10px;
+                right: 10px;
+                padding: 10px 16px;
+                font-size: 12px;
+            }
         }
     `;
 
     gmAddStyle(styles);
 
-    // Background Animation Class
-    class BackgroundMovingImage {
-        constructor(imageUrl, x, y, scale, speedX, speedY, rotationSpeed) {
-            this.image = new Image();
-            this.image.src = imageUrl;
-            this.x = x;
-            this.y = y;
-            this.scale = scale;
-            this.speedX = speedX;
-            this.speedY = speedY;
-            this.rotation = 0;
-            this.rotationSpeed = rotationSpeed;
-            this.canvas = document.getElementById('ytm-background-canvas');
-            this.ctx = this.canvas?.getContext('2d');
-        }
-
-        updatePosition() {
-            this.x += this.speedX;
-            this.y += this.speedY;
-            this.rotation += this.rotationSpeed;
-
-            // Wrap around screen
-            if (this.x > window.innerWidth + 100) this.x = -100;
-            if (this.x < -100) this.x = window.innerWidth + 100;
-            if (this.y > window.innerHeight + 100) this.y = -100;
-            if (this.y < -100) this.y = window.innerHeight + 100;
-        }
-
-        draw() {
-            if (!this.ctx || !this.image.complete) return;
-            
-            this.ctx.save();
-            this.ctx.globalAlpha = 0.3;
-            this.ctx.translate(this.x, this.y);
-            this.ctx.rotate(this.rotation);
-            this.ctx.scale(this.scale, this.scale);
-            this.ctx.drawImage(this.image, -50, -50, 100, 100);
-            this.ctx.restore();
-        }
-    }
-
-    // Animation Management
-    let backgroundImages = [];
-    let animationId = null;
-
-    function createAnimatedBackground(imageUrl) {
-        if (!imageUrl) return;
-        
-        backgroundImages = [];
-        const speedsX = [-0.15, 0.17, -0.1, 0.12, -0.15, -0.1, -0.12, -0.15, -0.17, -0.2, 0.1, 0.12, 0.15, 0.17, 0.2];
-        const speedsY = [-0.15, 0.17, -0.1, 0.12, -0.15, 0.1, -0.12, 0.2, -0.17, 0.2, -0.15, 0.17, -0.1, 0.12, -0.15];
-        const rotationSpeeds = [0.0001, -0.0002, 0.0003, -0.0004, 0.0005, -0.0001, 0.0002, -0.0003, 0.0004, -0.0005, -0.0003, 0.0004, -0.0005, 0.0003, -0.0004];
-
-        for (let i = 0; i < 15; i++) {
-            backgroundImages.push(new BackgroundMovingImage(
-                imageUrl,
-                Math.random() * window.innerWidth,
-                Math.random() * window.innerHeight,
-                0.8,
-                speedsX[i],
-                speedsY[i],
-                rotationSpeeds[i]
-            ));
-        }
-    }
-
-    function animate() {
-        if (!doAnimation || !beautifierContainer || beautifierContainer.style.display === 'none') {
-            animationId = requestAnimationFrame(animate);
-            return;
-        }
-
-        const canvas = document.getElementById('ytm-background-canvas');
-        const ctx = canvas?.getContext('2d');
-        
-        if (ctx && backgroundImages.length > 0) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            backgroundImages.forEach(image => {
-                image.updatePosition();
-                image.draw();
-            });
-        }
-        
-        animationId = requestAnimationFrame(animate);
-    }
-
     // Lyrics Management
     function initializeLyrics() {
-        const lyricsContainer = document.getElementById('ytm-lyrics-container');
+        const lyricsContainer = document.getElementById('ytm-lyrics-content');
         if (!lyricsContainer) return;
 
         lyricsContainer.innerHTML = '';
         
         // Add padding divs
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
             lyricsContainer.appendChild(document.createElement('div'));
         }
 
@@ -610,7 +443,7 @@
         }
 
         // Add padding divs
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
             lyricsContainer.appendChild(document.createElement('div'));
         }
 
@@ -722,90 +555,88 @@
     }
 
     // UI Creation
-    function createBeautifierUI() {
-        // Remove existing beautifier if present
-        const existing = document.getElementById('ytm-beautifier');
+    function createLyricsCard() {
+        // Remove existing card if present
+        const existing = document.getElementById('ytm-lyrics-card');
         if (existing) existing.remove();
 
-        const beautifier = document.createElement('div');
-        beautifier.id = 'ytm-beautifier';
-        beautifier.innerHTML = `
-            <canvas id="ytm-background-canvas"></canvas>
-            <div id="ytm-close-button">&times;</div>
-            <div id="ytm-toolbar">
-                <div class="ytm-toolbar-button" id="ytm-lyrics-toggle" title="Toggle Lyrics">🎤</div>
-                <div class="ytm-toolbar-button" id="ytm-fullscreen-toggle" title="Toggle Fullscreen">⛶</div>
+        const lyricsCard = document.createElement('div');
+        lyricsCard.id = 'ytm-lyrics-card';
+        lyricsCard.innerHTML = `
+            <div id="ytm-lyrics-header">
+                <div id="ytm-song-info">
+                    <div id="ytm-song-title">No song playing</div>
+                    <div id="ytm-song-artist">YouTube Music</div>
+                </div>
+                <div id="ytm-lyrics-controls">
+                    <button class="ytm-mini-control" id="ytm-minimize-btn" title="Minimize">−</button>
+                    <button class="ytm-mini-control" id="ytm-close-btn" title="Close">&times;</button>
+                </div>
             </div>
-            <div id="ytm-main-content" style="background-color: rgba(0, 0, 0, ${backgroundBlur});">
-                <div id="ytm-info-panel">
-                    <img id="ytm-album-image" src="" alt="Album Art">
-                    <h1 id="ytm-title">Title</h1>
-                    <h2 id="ytm-artist-album">Artist • Album</h2>
-                    <div id="ytm-progress-container">
-                        <div id="ytm-progress-bar"></div>
-                    </div>
-                    <div id="ytm-controls">
-                        <div class="ytm-control-button" id="ytm-prev-button" title="Previous">⏮</div>
-                        <div class="ytm-control-button" id="ytm-play-button" title="Play/Pause">⏯</div>
-                        <div class="ytm-control-button" id="ytm-next-button" title="Next">⏭</div>
-                    </div>
-                </div>
-                <div id="ytm-lyrics-panel">
-                    <div id="ytm-lyrics-container"></div>
-                </div>
+            <div id="ytm-lyrics-content">
+                <div class="ytm-lyric-line">🎵 Loading lyrics...</div>
             </div>
         `;
 
-        document.body.appendChild(beautifier);
-        beautifierContainer = beautifier;
+        document.body.appendChild(lyricsCard);
+        beautifierContainer = lyricsCard;
 
-        // Setup canvas
-        const canvas = document.getElementById('ytm-background-canvas');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        // Make the card draggable
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        let xOffset = 0;
+        let yOffset = 0;
 
-        // Event listeners
-        document.getElementById('ytm-close-button').onclick = hideBeautifier;
-        document.getElementById('ytm-play-button').onclick = triggerPlayPause;
-        document.getElementById('ytm-prev-button').onclick = triggerPrevious;
-        document.getElementById('ytm-next-button').onclick = triggerNext;
+        const header = document.getElementById('ytm-lyrics-header');
         
-        document.getElementById('ytm-lyrics-toggle').onclick = () => {
-            const lyricsPanel = document.getElementById('ytm-lyrics-panel');
-            lyricsPanel.style.display = lyricsPanel.style.display === 'none' ? 'block' : 'none';
-        };
-
-        document.getElementById('ytm-fullscreen-toggle').onclick = toggleFullscreen;
-        
-        document.getElementById('ytm-progress-container').onclick = (e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const percentage = clickX / rect.width;
-            // This would need more complex seeking implementation
-            console.log(`Seek to ${percentage * 100}%`);
-        };
-
-        // Resize canvas on window resize
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        header.addEventListener('mousedown', (e) => {
+            initialX = e.clientX - xOffset;
+            initialY = e.clientY - yOffset;
+            
+            if (e.target === header || e.target.closest('#ytm-song-info')) {
+                isDragging = true;
+            }
         });
 
-        return beautifier;
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+                
+                xOffset = currentX;
+                yOffset = currentY;
+                
+                lyricsCard.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Event listeners
+        document.getElementById('ytm-close-btn').onclick = hideLyricsCard;
+        document.getElementById('ytm-minimize-btn').onclick = toggleMinimize;
+
+        return lyricsCard;
     }
 
     function createLauncher() {
         const launcher = document.createElement('button');
         launcher.id = 'ytm-launcher';
-        launcher.textContent = '🎵 Open Beautifier';
-        launcher.onclick = showBeautifier;
+        launcher.innerHTML = '� <span>Lyrics</span>';
+        launcher.onclick = showLyricsCard;
         document.body.appendChild(launcher);
         return launcher;
     }
 
-    function showBeautifier() {
+    function showLyricsCard() {
         if (!beautifierContainer) {
-            createBeautifierUI();
+            createLyricsCard();
         }
         beautifierContainer.classList.add('active');
         
@@ -814,49 +645,42 @@
         if (songData) {
             updateUI(songData);
         }
-        
-        // Start animation
-        if (!animationId) {
-            animate();
-        }
     }
 
-    function hideBeautifier() {
+    function hideLyricsCard() {
         if (beautifierContainer) {
             beautifierContainer.classList.remove('active');
         }
-        if (isFullscreen) {
-            document.exitFullscreen();
-            isFullscreen = false;
-        }
     }
 
-    function toggleFullscreen() {
-        if (!isFullscreen) {
-            beautifierContainer.requestFullscreen();
-            isFullscreen = true;
+    function toggleMinimize() {
+        const content = document.getElementById('ytm-lyrics-content');
+        const minimizeBtn = document.getElementById('ytm-minimize-btn');
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            minimizeBtn.innerHTML = '−';
+            minimizeBtn.title = 'Minimize';
         } else {
-            document.exitFullscreen();
-            isFullscreen = false;
+            content.style.display = 'none';
+            minimizeBtn.innerHTML = '+';
+            minimizeBtn.title = 'Expand';
         }
     }
 
     function updateUI(songData) {
         if (!songData) return;
 
-        document.getElementById('ytm-title').textContent = songData.title;
-        document.getElementById('ytm-artist-album').textContent = `${songData.artist} • ${songData.album}`;
+        // Update song info in the header
+        const titleElement = document.getElementById('ytm-song-title');
+        const artistElement = document.getElementById('ytm-song-artist');
         
-        const albumImage = document.getElementById('ytm-album-image');
-        if (songData.largeImage || songData.thumbnail) {
-            albumImage.src = songData.largeImage || songData.thumbnail;
-            createAnimatedBackground(songData.largeImage || songData.thumbnail);
+        if (titleElement) {
+            titleElement.textContent = songData.title || 'Unknown Title';
         }
-
-        // Update progress bar
-        const progressBar = document.getElementById('ytm-progress-bar');
-        const progressPercent = (songData.elapsed / songData.total) * 100;
-        progressBar.style.width = `${progressPercent}%`;
+        if (artistElement) {
+            artistElement.textContent = songData.artist || 'Unknown Artist';
+        }
 
         // Update lyrics
         const adjustedTime = songData.elapsed - incomingSecondOffset;
@@ -943,27 +767,22 @@
         
         switch(e.key) {
             case 'Escape':
-                hideBeautifier();
+                hideLyricsCard();
                 break;
-            case ' ':
-                e.preventDefault();
-                triggerPlayPause();
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                triggerPrevious();
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                triggerNext();
+            case 'l':
+            case 'L':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    showLyricsCard();
+                }
                 break;
         }
     });
 
     // Export for debugging
     window.ytmBeautifier = {
-        show: showBeautifier,
-        hide: hideBeautifier,
+        show: showLyricsCard,
+        hide: hideLyricsCard,
         getNowPlaying,
         getSongLyrics
     };
