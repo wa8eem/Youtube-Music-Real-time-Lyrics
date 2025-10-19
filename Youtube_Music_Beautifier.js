@@ -83,6 +83,12 @@
         return minutes * 60 + seconds;
     }
 
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
     function format(str) {
         str = str.replaceAll("&amp;", "&");
         str = str.replaceAll("&nbsp;", " ");
@@ -341,6 +347,9 @@
             transition: all 0.3s ease;
             cursor: pointer;
             line-height: 1.4;
+            padding: 8px 12px;
+            border-radius: 8px;
+            position: relative;
         }
 
         .ytm-lyric-line.active {
@@ -349,10 +358,19 @@
             font-size: 16px;
             color: #ff6b6b;
             transform: scale(1.05);
+            background: rgba(255, 107, 107, 0.1);
         }
 
         .ytm-lyric-line:hover {
             opacity: 0.8;
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateX(4px);
+        }
+
+        .ytm-lyric-line.seeking {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(0.95);
+            opacity: 0.6;
         }
 
         #ytm-launcher {
@@ -438,6 +456,7 @@
             lyricDiv.className = 'ytm-lyric-line';
             lyricDiv.id = `ytm-lyric-${i}`;
             lyricDiv.textContent = lyrics[i];
+            lyricDiv.title = `Click to seek to: ${formatTime(times[i])}`;
             lyricDiv.onclick = () => seekToLyric(i);
             lyricsContainer.appendChild(lyricDiv);
         }
@@ -454,15 +473,112 @@
     function seekToLyric(index) {
         if (times[index] !== undefined) {
             const targetTime = times[index];
-            // Simulate seeking by triggering keyboard shortcuts
+            const lyricElement = document.getElementById(`ytm-lyric-${index}`);
+            
+            // Add visual feedback
+            if (lyricElement) {
+                lyricElement.classList.add('seeking');
+                setTimeout(() => {
+                    lyricElement.classList.remove('seeking');
+                }, 500);
+            }
+            
+            // Show seeking feedback in console
+            console.log(`Clicking to seek to: "${lyrics[index]}" at ${targetTime}s`);
+            
+            // Perform the seek
             simulateSeek(targetTime);
+            
+            // Update current index to the clicked lyric
+            currentIndex = index;
+            
+            // Remove active class from all lyrics and add to clicked one
+            const allLyrics = document.querySelectorAll('.ytm-lyric-line');
+            allLyrics.forEach(line => line.classList.remove('active'));
+            if (lyricElement) {
+                lyricElement.classList.add('active');
+                lyricElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+            }
         }
     }
 
     function simulateSeek(targetTime) {
-        // This is a simplified seek - in reality you'd need to calculate the difference
-        // and simulate multiple forward/backward key presses
         console.log(`Seeking to ${targetTime} seconds`);
+        
+        // Get current song data to know current position
+        const songData = getNowPlaying();
+        if (!songData) return;
+        
+        const currentTime = songData.elapsed;
+        const timeDifference = targetTime - currentTime;
+        
+        // If the difference is small (less than 2 seconds), don't seek
+        if (Math.abs(timeDifference) < 2) {
+            console.log("Time difference too small, skipping seek");
+            return;
+        }
+        
+        // Try to use YouTube Music's internal seeking mechanism
+        const progressBar = document.querySelector('.progress-bar.ytmusic-player-bar');
+        const sliderContainer = document.querySelector('#progress-bar');
+        
+        if (progressBar && sliderContainer) {
+            try {
+                // Calculate the percentage position
+                const percentage = targetTime / songData.total;
+                const rect = sliderContainer.getBoundingClientRect();
+                const clickX = rect.left + (rect.width * percentage);
+                const clickY = rect.top + (rect.height / 2);
+                
+                // Create and dispatch click event
+                const clickEvent = new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: clickX,
+                    clientY: clickY
+                });
+                
+                sliderContainer.dispatchEvent(clickEvent);
+                console.log(`Seeked to ${percentage * 100}% of track`);
+                
+            } catch (error) {
+                console.log("Direct seeking failed, trying keyboard method:", error);
+                fallbackKeyboardSeek(timeDifference);
+            }
+        } else {
+            console.log("Progress bar not found, using keyboard method");
+            fallbackKeyboardSeek(timeDifference);
+        }
+    }
+    
+    function fallbackKeyboardSeek(timeDifference) {
+        // Fallback method using keyboard shortcuts
+        // YouTube Music uses arrow keys for seeking (usually 5-10 second intervals)
+        const seekInterval = 10; // YouTube Music typically seeks 10 seconds per arrow key
+        const seekCount = Math.floor(Math.abs(timeDifference) / seekInterval);
+        
+        if (seekCount === 0) return;
+        
+        const key = timeDifference > 0 ? 'ArrowRight' : 'ArrowLeft';
+        const targetElement = document.querySelector('ytmusic-player-bar') || document.body;
+        
+        console.log(`Using keyboard seek: ${key} x${seekCount}`);
+        
+        // Send multiple key presses with small delays
+        for (let i = 0; i < Math.min(seekCount, 10); i++) { // Limit to 10 presses to avoid issues
+            setTimeout(() => {
+                const keyEvent = new KeyboardEvent('keydown', {
+                    key: key,
+                    code: key,
+                    bubbles: true,
+                    cancelable: true
+                });
+                targetElement.dispatchEvent(keyEvent);
+            }, i * 100); // 100ms delay between key presses
+        }
     }
 
     function updateLyrics(currentSeconds) {
